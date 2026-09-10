@@ -64,12 +64,32 @@ export class MacClient {
     });
   }
 
-  /** Run an AppleScript (or JXA) snippet via osascript, script supplied on stdin. */
-  async osa(script: string, language: "AppleScript" | "JavaScript" = "AppleScript"): Promise<string> {
-    const args = language === "JavaScript" ? ["-l", "JavaScript"] : [];
-    const r = await this.run("osascript", args, { input: script });
-    if (r.code !== 0) throw new MacError(`osascript failed: ${r.stderr.trim() || `exit ${r.code}`}`);
+  /** Turn an osascript result into text, with clear errors for the common permission failures. */
+  private osaResult(r: ExecResult): string {
+    if (r.timedOut) {
+      throw new MacError(
+        "osascript timed out — the host process likely lacks Automation/Accessibility permission " +
+          "(System Settings → Privacy & Security → Automation / Accessibility).",
+      );
+    }
+    if (r.code !== 0) {
+      const err = r.stderr.trim();
+      if (/-1743|not allowed|not authori/i.test(err)) {
+        throw new MacError(`osascript was denied (${err}). Grant Automation/Accessibility permission to the host app.`);
+      }
+      throw new MacError(`osascript failed: ${err || `exit ${r.code}`}`);
+    }
     return r.stdout.trim();
+  }
+
+  /** Run an AppleScript (or JXA) snippet via osascript, script supplied on stdin. */
+  async osa(
+    script: string,
+    language: "AppleScript" | "JavaScript" = "AppleScript",
+    timeoutMs?: number,
+  ): Promise<string> {
+    const args = language === "JavaScript" ? ["-l", "JavaScript"] : [];
+    return this.osaResult(await this.run("osascript", args, { input: script, timeoutMs }));
   }
 
   /**
@@ -77,11 +97,9 @@ export class MacClient {
    * `item N of argv`), never interpolated into the source — so no string escaping is required
    * and user text cannot alter the script.
    */
-  private async osaArgv(lines: string[], argv: string[]): Promise<string> {
+  private async osaArgv(lines: string[], argv: string[], timeoutMs?: number): Promise<string> {
     const eArgs = lines.flatMap((l) => ["-e", l]);
-    const r = await this.run("osascript", [...eArgs, "--", ...argv]);
-    if (r.code !== 0) throw new MacError(`osascript failed: ${r.stderr.trim() || `exit ${r.code}`}`);
-    return r.stdout.trim();
+    return this.osaResult(await this.run("osascript", [...eArgs, "--", ...argv], { timeoutMs }));
   }
 
   // ---- observe / read ----
@@ -208,12 +226,18 @@ export class MacClient {
 
   async listApps(): Promise<string[]> {
     const out = await this.osa(
-      'tell application "System Events" to get name of (every process whose background only is false)',
+      'tell application "System Events" to get name of every application process whose background only is false',
+      "AppleScript",
+      12_000,
     );
     return out.split(", ").map((s) => s.trim()).filter(Boolean).sort();
   }
   async frontmostApp(): Promise<string> {
-    return this.osa('tell application "System Events" to get name of first process whose frontmost is true');
+    return this.osa(
+      'tell application "System Events" to get name of first application process whose frontmost is true',
+      "AppleScript",
+      12_000,
+    );
   }
 
   async notify(title: string, message: string): Promise<void> {
