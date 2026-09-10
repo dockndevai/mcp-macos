@@ -1,0 +1,53 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.dockndevai/mcp-macos",
+  "description": "Observe & operate a Mac — files, processes, apps, shell, AppleScript, GUI — safe by default.",
+  "repository": {
+    "url": "https://github.com/dockndevai/mcp-macos",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@dockndevai/mcp-macos",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "MACOS_MODE",
+          "description": "Access mode: read-only | read-write | admin. Starts read-only; writes need read-write.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "MACOS_ALLOW_EXEC",
+          "description": "Set true to allow run_command / run_applescript / kill_process (admin mode).",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "MACOS_ALLOW_DELETE",
+          "description": "Set true to allow delete_path (moves to Trash; admin mode).",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "MACOS_ALLOW_INPUT",
+          "description": "Set true to allow GUI input (type/key/click; admin mode). Needs Accessibility permission.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "MACOS_PATH_ALLOWLIST",
+          "description": "Comma-separated path roots the agent may touch (empty = anywhere; protected paths still apply).",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

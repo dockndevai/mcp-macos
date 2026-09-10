@@ -1,0 +1,59 @@
+{
+  "name": "@dockndevai/mcp-macos",
+  "mcpName": "io.github.dockndevai/mcp-macos",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server for macOS — observe and operate a Mac (files, processes, apps, screenshots, shell, AppleScript, GUI) with safe-by-default access controls.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dockndevai/mcp-macos.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dockndevai/mcp-macos/issues"
+  },
+  "homepage": "https://github.com/dockndevai/mcp-macos#readme",
+  "bin": {
+    "mcp-macos": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "macos",
+    "mac",
+    "automation",
+    "applescript",
+    "computer-use",
+    "llm",
+    "ai"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}
