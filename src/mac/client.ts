@@ -72,6 +72,18 @@ export class MacClient {
     return r.stdout.trim();
   }
 
+  /**
+   * Run a small AppleScript whose user-supplied values are passed as argv (accessible as
+   * `item N of argv`), never interpolated into the source — so no string escaping is required
+   * and user text cannot alter the script.
+   */
+  private async osaArgv(lines: string[], argv: string[]): Promise<string> {
+    const eArgs = lines.flatMap((l) => ["-e", l]);
+    const r = await this.run("osascript", [...eArgs, "--", ...argv]);
+    if (r.code !== 0) throw new MacError(`osascript failed: ${r.stderr.trim() || `exit ${r.code}`}`);
+    return r.stdout.trim();
+  }
+
   // ---- observe / read ----
   async systemInfo(): Promise<Record<string, unknown>> {
     const sw = await this.run("sw_vers", []).catch(() => null);
@@ -120,23 +132,20 @@ export class MacClient {
   }
 
   async readFile(abs: string): Promise<{ path: string; bytes: number; truncated: boolean; content: string }> {
-    let stat;
+    let fh;
     try {
-      stat = await fs.stat(abs);
+      fh = await fs.open(abs, "r");
     } catch (e) {
       throw new MacError(`Cannot read '${abs}': ${(e as Error).message}`);
     }
-    if (stat.isDirectory()) throw new MacError(`'${abs}' is a directory; use list_directory.`);
-    const fh = await fs.open(abs, "r");
     try {
-      const buf = Buffer.alloc(Math.min(stat.size, this.limits.maxFileBytes));
-      await fh.read(buf, 0, buf.length, 0);
-      return {
-        path: abs,
-        bytes: stat.size,
-        truncated: stat.size > buf.length,
-        content: buf.toString("utf8"),
-      };
+      // Stat the open handle (not the path again) so there is no time-of-check/time-of-use gap.
+      const stat = await fh.stat();
+      if (stat.isDirectory()) throw new MacError(`'${abs}' is a directory; use list_directory.`);
+      const len = Math.min(stat.size, this.limits.maxFileBytes);
+      const buf = Buffer.alloc(len);
+      await fh.read(buf, 0, len, 0);
+      return { path: abs, bytes: stat.size, truncated: stat.size > len, content: buf.toString("utf8") };
     } finally {
       await fh.close();
     }
@@ -158,8 +167,10 @@ export class MacClient {
 
   /** Move a path to the Trash (recoverable) via Finder. */
   async trashPath(abs: string): Promise<void> {
-    const posix = abs.replace(/"/g, '\\"');
-    await this.osa(`tell application "Finder" to delete (POSIX file "${posix}" as alias)`);
+    await this.osaArgv(
+      ["on run argv", 'tell application "Finder" to delete (POSIX file (item 1 of argv) as alias)', "end run"],
+      [abs],
+    );
   }
 
   async listProcesses(limit: number, filter?: string): Promise<Array<Record<string, unknown>>> {
@@ -206,8 +217,10 @@ export class MacClient {
   }
 
   async notify(title: string, message: string): Promise<void> {
-    const esc = (s: string) => s.replace(/["\\]/g, "\\$&");
-    await this.osa(`display notification "${esc(message)}" with title "${esc(title)}"`);
+    await this.osaArgv(
+      ["on run argv", "display notification (item 2 of argv) with title (item 1 of argv)", "end run"],
+      [title, message],
+    );
   }
 
   async open(target: string, asApp: boolean): Promise<void> {
@@ -230,26 +243,33 @@ export class MacClient {
   }
 
   // ---- GUI input ----
-  /** Type literal text into the frontmost app (native, via System Events). */
+  /** Type literal text into the frontmost app (native, via System Events; text passed as argv). */
   async typeText(text: string): Promise<void> {
-    const esc = text.replace(/["\\]/g, "\\$&");
-    await this.osa(`tell application "System Events" to keystroke "${esc}"`);
+    await this.osaArgv(
+      ["on run argv", 'tell application "System Events" to keystroke (item 1 of argv)', "end run"],
+      [text],
+    );
   }
 
   /** Press a key with optional modifiers (native, via System Events). */
   async keyPress(key: string, modifiers: string[]): Promise<void> {
-    const mods = modifiers.map((m) => `${m} down`).join(", ");
+    // Whitelist modifiers so nothing user-supplied is interpolated into the script.
+    const allowed = new Set(["command", "option", "control", "shift"]);
+    const mods = modifiers.filter((m) => allowed.has(m)).map((m) => `${m} down`).join(", ");
     const using = mods ? ` using {${mods}}` : "";
-    // Named keys map to `key code`; single characters use keystroke.
+    // Named keys map to a fixed numeric `key code`; single characters use keystroke (via argv).
     const codes: Record<string, number> = {
       return: 36, enter: 36, tab: 48, space: 49, delete: 51, escape: 53, esc: 53,
       left: 123, right: 124, down: 125, up: 126, home: 115, end: 119, pageup: 116, pagedown: 121,
     };
-    const k = key.toLowerCase();
-    if (k in codes) await this.osa(`tell application "System Events" to key code ${codes[k]}${using}`);
-    else {
-      const esc = key.replace(/["\\]/g, "\\$&");
-      await this.osa(`tell application "System Events" to keystroke "${esc}"${using}`);
+    const code = codes[key.toLowerCase()];
+    if (code !== undefined) {
+      await this.osa(`tell application "System Events" to key code ${code}${using}`);
+    } else {
+      await this.osaArgv(
+        ["on run argv", `tell application "System Events" to keystroke (item 1 of argv)${using}`, "end run"],
+        [key],
+      );
     }
   }
 
