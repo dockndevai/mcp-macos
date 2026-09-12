@@ -1,7 +1,7 @@
 {
   "name": "@dockndevai/mcp-macos",
   "mcpName": "io.github.dockndevai/mcp-macos",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Model Context Protocol server for macOS — observe and operate a Mac (files, processes, apps, screenshots, shell, AppleScript, GUI) with safe-by-default access controls.",
   "type": "module",
   "license": "MIT",
@@ -51,8 +51,8 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@types/node": "^22.9.0",
-    "tsx": "^4.19.2",
+    "@types/node": "^26.5.0",
+    "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"
   }
