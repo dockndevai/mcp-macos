@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { resolvePath } from "../config.js";
+import { canonicalize, resolvePath } from "../config.js";
 import type { ToolDef } from "./types.js";
 import { jsonResult, textResult } from "./types.js";
 
@@ -89,7 +89,7 @@ export const adminTools: ToolDef[] = [
       inputSchema: { path: z.string().min(1).describe("Path to trash (supports ~).") },
     },
     handler: async (args, { client, policy, confirm }) => {
-      const abs = resolvePath(args.path as string);
+      const abs = await canonicalize(resolvePath(args.path as string));
       const { dryRun } = policy.guard({
         tool: "delete_path",
         capability: "admin",

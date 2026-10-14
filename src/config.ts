@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { AccessMode, SecurityConfig } from "./security.js";
@@ -18,12 +19,34 @@ export interface AppConfig {
 
 const HOME = os.homedir();
 
-/** Expand a leading `~` and resolve to an absolute, normalized path. */
+/** Expand a leading `~` and resolve to an absolute, normalized path (lexical only). */
 export function resolvePath(p: string): string {
   let s = p.trim();
   if (s === "~") s = HOME;
   else if (s.startsWith("~/")) s = path.join(HOME, s.slice(2));
   return path.resolve(s);
+}
+
+/**
+ * Canonicalize an absolute path by resolving symlinks, so the allowlist and
+ * protected-path checks apply to the REAL target — not a lexical path that a
+ * symlink inside an allowed root could use to escape it.
+ *
+ * - Existing path (file, dir, or symlink): fully resolved via realpath.
+ * - Non-existent leaf (e.g. a file about to be created): the parent directory
+ *   is realpath'd (so a symlinked parent can't escape either) and the leaf name
+ *   appended. A missing parent surfaces as a normal ENOENT error.
+ *
+ * Always guard on the value this returns, and perform the filesystem op on it.
+ */
+export async function canonicalize(abs: string): Promise<string> {
+  try {
+    return await fs.realpath(abs);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    const realDir = await fs.realpath(path.dirname(abs));
+    return path.join(realDir, path.basename(abs));
+  }
 }
 
 function csv(name: string): string[] {

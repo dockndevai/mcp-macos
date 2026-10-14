@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { resolvePath } from "../config.js";
+import { canonicalize, resolvePath } from "../config.js";
 import type { ToolDef } from "./types.js";
 import { imageResult, jsonResult, textResult } from "./types.js";
 
@@ -30,7 +30,7 @@ export const readTools: ToolDef[] = [
       inputSchema: { path: z.string().min(1).describe("Directory path (supports ~ for home).") },
     },
     handler: async (args, { client, policy }) => {
-      const abs = resolvePath(args.path as string);
+      const abs = await canonicalize(resolvePath(args.path as string));
       policy.guard({ tool: "list_directory", capability: "read", path: abs });
       return jsonResult({ path: abs, entries: await client.listDirectory(abs) });
     },
@@ -44,7 +44,7 @@ export const readTools: ToolDef[] = [
       inputSchema: { path: z.string().min(1).describe("File path (supports ~ for home).") },
     },
     handler: async (args, { client, policy }) => {
-      const abs = resolvePath(args.path as string);
+      const abs = await canonicalize(resolvePath(args.path as string));
       policy.guard({ tool: "read_file", capability: "read", path: abs });
       return jsonResult(await client.readFile(abs));
     },
