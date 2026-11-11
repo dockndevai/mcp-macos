@@ -71,7 +71,8 @@ This server can drive an entire Mac, so the access model (enforced by [`src/secu
 | Can it drive the GUI? | `MACOS_ALLOW_INPUT` | `false` | Gates `type_text`/`key_press`/`click`/`move_mouse`. |
 | Preview without doing | `MACOS_DRY_RUN` | `false` | Mutating tools validate + log intent, then return. |
 | Audit trail | `MACOS_AUDIT_LOG` | `true` | JSON line to stderr per guarded operation (`ALLOW`/`DENY`/`DRY_RUN`). |
-| Interactive confirmation | *(automatic)* | — | `run_command`, `run_applescript`, `delete_path`, `kill_process` and file overwrites ask the human to approve via MCP elicitation before running; clients without elicitation fall back to the flags. |
+| Interactive confirmation | *(automatic)* | — | `run_command`, `run_applescript`, `delete_path`, `kill_process` and file overwrites ask the human to approve via MCP elicitation before running. The prompt shows the tool, the exact arguments (command text, script, path) and a fingerprint; for `delete_path`, `kill_process` and overwrites the target's version is pinned across the prompt and the action is refused if it changed; a prompt nobody answers is a refusal; trashing a folder also needs its path typed. |
+| Require a human | `MACOS_REQUIRE_HUMAN_APPROVAL` | `false` | When `true`, those actions are **refused** if the client cannot elicit (instead of falling back to the `MACOS_ALLOW_*` flags alone). |
 
 See [SECURITY.md](SECURITY.md).
 

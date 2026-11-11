@@ -12,6 +12,7 @@ function makePolicy(overrides: Partial<SecurityConfig> = {}): SecurityPolicy {
     allowInput: false,
     dryRun: false,
     auditLog: false,
+    requireHumanApproval: false,
     ...overrides,
   });
 }

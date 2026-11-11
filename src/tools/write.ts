@@ -28,7 +28,12 @@ export const writeTools: ToolDef[] = [
       const exists = await client.pathExists(abs);
       if (dryRun) return textResult(`[dry-run] Would ${exists ? "overwrite" : "create"} ${abs}.`);
       if (exists) {
-        const ok = await confirm.confirm({ action: "overwrite file", target: abs });
+        const ok = await confirm.confirm({
+          action: "overwrite file",
+          target: abs,
+          // Canonical path + inode + mtime + size (directory: entry count) at prompt time; see MacClient.pathVersion.
+          probe: () => client.pathVersion(abs),
+        });
         if (!ok.approved) return textResult(`Write cancelled — ${ok.reason}.`);
       }
       await client.writeFile(abs, args.content as string);

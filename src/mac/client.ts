@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { RuntimeLimits } from "../config.js";
+import { canonicalize, type RuntimeLimits } from "../config.js";
 
 export class MacError extends Error {
   constructor(message: string) {
@@ -178,6 +179,41 @@ export class MacClient {
     }
   }
 
+  /** True when `abs` exists and is a directory (not following a final symlink). */
+  async isDirectory(abs: string): Promise<boolean> {
+    try {
+      return (await fs.lstat(abs)).isDirectory();
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Version token for a file or directory, pinned across an approval prompt. It is computed on the
+   * CANONICAL path — `abs` is re-resolved with realpath on every call, so a parent directory swapped
+   * for a symlink while the human decides changes the token, as does the target being replaced.
+   * Covers: canonical path + inode + mtime (ns), plus size for a file, or the immediate entry count
+   * for a directory. Returns `undefined` if the path does not exist; throws on other errors.
+   *
+   * Limits: a change that keeps size and mtime (e.g. an in-place rewrite followed by `touch -r`) is not
+   * visible; a directory's token reflects only its immediate entries, so editing or adding files
+   * deeper in the tree does not change it — a recursive trash is bound to the directory as it looked
+   * at the prompt, not to every nested file.
+   */
+  async pathVersion(abs: string): Promise<string | undefined> {
+    let real: string;
+    let st;
+    try {
+      real = await canonicalize(abs);
+      st = await fs.lstat(real, { bigint: true });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw e;
+    }
+    const kind = st.isDirectory() ? `dir:${(await fs.readdir(real)).length}` : `file:${st.size}`;
+    return createHash("sha256").update(`${real}|${st.ino}|${st.mtimeNs}|${kind}`).digest("hex").slice(0, 12);
+  }
+
   async writeFile(abs: string, content: string): Promise<void> {
     await fs.mkdir(path.dirname(abs), { recursive: true });
     await fs.writeFile(abs, content, "utf8");
@@ -205,6 +241,26 @@ export class MacClient {
       out = out.filter((p) => String(p.command).toLowerCase().includes(f));
     }
     return out.sort((a, b) => (b.cpu as number) - (a.cpu as number)).slice(0, limit);
+  }
+
+  /** Start time and full command line of a process, or `undefined` if no such process. */
+  async processIdentity(pid: number): Promise<{ started: string; command: string } | undefined> {
+    const r = await this.run("ps", ["-o", "lstart=", "-p", String(pid)]);
+    const started = r.stdout.trim();
+    if (r.code !== 0 || !started) return undefined;
+    const c = await this.run("ps", ["-o", "command=", "-p", String(pid)]);
+    return { started, command: c.stdout.trim() };
+  }
+
+  /**
+   * Version token for a process, pinned across an approval prompt: pid + start time + command line,
+   * so a pid recycled for a different process is caught. Limit: `lstart` has one-second resolution, so
+   * a different process with an identical command line started in the same second would look the same.
+   */
+  async processVersion(pid: number): Promise<string | undefined> {
+    const id = await this.processIdentity(pid);
+    if (!id) return undefined;
+    return createHash("sha256").update(`${pid}|${id.started}|${id.command}`).digest("hex").slice(0, 12);
   }
 
   killProcess(pid: number, signal: NodeJS.Signals): void {
