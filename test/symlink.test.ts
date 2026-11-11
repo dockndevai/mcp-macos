@@ -25,6 +25,7 @@ function policy(allowRoot: string): SecurityPolicy {
     allowInput: false,
     dryRun: false,
     auditLog: false,
+    requireHumanApproval: false,
   };
   return new SecurityPolicy(cfg);
 }

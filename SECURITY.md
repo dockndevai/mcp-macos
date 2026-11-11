@@ -21,6 +21,16 @@ a highly privileged automation and grant it the least access that gets the job d
   `run_command`, `run_applescript`, `delete_path`, `kill_process` and file overwrites
   pause and ask you to approve before running — a model can't self-approve. Without
   elicitation, the `MACOS_ALLOW_*` flags remain the gate.
+- **Require a human for destructive ops.** Set `MACOS_REQUIRE_HUMAN_APPROVAL=true` so `run_command`,
+  `run_applescript`, `delete_path`, `kill_process` and file overwrites are refused when the client cannot show
+  an approval prompt. Each approval is bound to the exact tool and arguments (fingerprint, so the command text
+  or script you were shown is what runs) and, where there is a target, to its version: for `delete_path` and
+  file overwrites the canonical (symlink-resolved) path plus inode, mtime and size (a folder: entry count
+  instead of size); for `kill_process` the pid plus process start time and command line. If the target
+  changed while the human was deciding, the action is refused. Trashing a folder also asks the human to
+  type its path. Approval receipts are written to the audit log (`"audit":"approval"`, with `approvedBy` =
+  `human` or `flag-only`). Limits: a folder's token covers only its immediate entries, and the prompt shows
+  the first 1500 characters of the arguments (the fingerprint covers all of them).
 - **Deletes are recoverable.** `delete_path` moves items to the Trash, not `rm`.
 - **Preview with dry-run.** `MACOS_DRY_RUN=true` validates and logs intent without
   touching the machine.

@@ -99,6 +99,7 @@ export function loadConfig(): AppConfig {
     allowInput: bool("MACOS_ALLOW_INPUT"),
     dryRun: bool("MACOS_DRY_RUN"),
     auditLog: bool("MACOS_AUDIT_LOG", true),
+    requireHumanApproval: bool("MACOS_REQUIRE_HUMAN_APPROVAL", false),
   };
   const limits: RuntimeLimits = {
     maxFileBytes: num("MACOS_MAX_FILE_BYTES", 1_000_000),
