@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.3.0] - 2026-11-11
 
 ### Security
+- **`write_file` can no longer overwrite a file created between its existence check and the write.** A target
+  that did not exist skipped the approval prompt, so a file (or symlink) that appeared before the write landed was
+  silently overwritten. A new file is now opened exclusive-create (`O_EXCL`); on `EEXIST` the call re-resolves the
+  path, re-applies the path policy and asks the human to approve the overwrite (refused in strict mode, or if it
+  keeps losing the race). All writes also open with `O_NOFOLLOW`, so a symlink at the leaf is never followed; this
+  also closes writing through a pre-existing dangling symlink (it created the link's target, outside the allowlist).
 - Strict mode (`*_REQUIRE_HUMAN_APPROVAL`) now refuses an action whose target's version cannot be read (it used to proceed unpinned), and the approval prompt no longer calls reversible changes (moves, config changes) irreversible.
 - **Approval prompts are fully reviewable.** Arguments are shown in full up to 16 000 characters (previously cut at 1500, so a padded prefix could hide the tail of a long statement); a longer action is refused instead of approved blind. Secret redaction in prompts matches whole words (`bypass`/`tokenizer` are no longer shown as `[redacted]`).
 - laya-guard now receives the secret-redacted arguments (`canonicalArgs`) instead of `JSON.stringify(args)`, so credentials in tool arguments no longer reach the guard prompt, the guard daemon, or its log.

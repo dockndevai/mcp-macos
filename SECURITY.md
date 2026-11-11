@@ -31,6 +31,11 @@ a highly privileged automation and grant it the least access that gets the job d
   type its path. Approval receipts are written to the audit log (`"audit":"approval"`, with `approvedBy` =
   `human` or `flag-only`). Limits: a folder's token covers only its immediate entries, and the prompt shows
   the first 1500 characters of the arguments (the fingerprint covers all of them).
+  `write_file` creates a path that did not exist with exclusive-create (`O_EXCL`) and never follows a symlink at the
+  final path component (`O_NOFOLLOW`, also on overwrites): a file or link that appears at the target between the
+  existence check and the write is re-resolved, re-checked against the allowlist and put to the human as an overwrite
+  (refused in strict mode), never silently overwritten; a dangling symlink at the target is refused. Limit: only the
+  last path component is protected — a parent directory swapped for a symlink in the same instant is not detected.
 - **Deletes are recoverable.** `delete_path` moves items to the Trash, not `rm`.
 - **Preview with dry-run.** `MACOS_DRY_RUN=true` validates and logs intent without
   touching the machine.
