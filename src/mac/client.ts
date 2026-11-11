@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { promises as fs } from "node:fs";
+import { constants as fsConstants, promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { canonicalize, type RuntimeLimits } from "../config.js";
@@ -9,6 +9,14 @@ export class MacError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "MacError";
+  }
+}
+
+/** `write_file` in create mode found something at the target (a file, or any symlink — even a dangling one). */
+export class FileExistsError extends MacError {
+  constructor(abs: string) {
+    super(`'${abs}' already exists.`);
+    this.name = "FileExistsError";
   }
 }
 
@@ -214,9 +222,39 @@ export class MacClient {
     return createHash("sha256").update(`${real}|${st.ino}|${st.mtimeNs}|${kind}`).digest("hex").slice(0, 12);
   }
 
-  async writeFile(abs: string, content: string): Promise<void> {
+  /**
+   * Write `content` to `abs`, which the caller has already canonicalized and guarded.
+   *
+   * - `exclusive: true` (create mode) opens with O_CREAT|O_EXCL: it succeeds only if nothing exists at
+   *   `abs`. Anything that appeared since the caller checked — a file, or a symlink, even a dangling one —
+   *   makes it throw `FileExistsError` instead of being written through. The caller used this mode because
+   *   it skipped the overwrite approval for a path that did not exist, so it must never overwrite.
+   * - otherwise (overwrite mode, reached after the human approved) the open still carries O_NOFOLLOW, so a
+   *   final-component symlink swapped in after the approval is refused (ELOOP) rather than followed out of
+   *   the allowlist.
+   *
+   * Limit: O_NOFOLLOW only covers the last path component. A parent directory swapped for a symlink inside
+   * the same instant is not detected by this call (Node has no openat); `abs` is canonicalized just before.
+   */
+  async writeFile(abs: string, content: string, opts: { exclusive?: boolean } = {}): Promise<void> {
     await fs.mkdir(path.dirname(abs), { recursive: true });
-    await fs.writeFile(abs, content, "utf8");
+    const { O_WRONLY, O_CREAT, O_EXCL, O_TRUNC, O_NOFOLLOW } = fsConstants;
+    const flags = O_WRONLY | O_CREAT | O_NOFOLLOW | (opts.exclusive ? O_EXCL : O_TRUNC);
+    let fh;
+    try {
+      fh = await fs.open(abs, flags, 0o666);
+    } catch (e) {
+      if (opts.exclusive && (e as NodeJS.ErrnoException).code === "EEXIST") throw new FileExistsError(abs);
+      if ((e as NodeJS.ErrnoException).code === "ELOOP") {
+        throw new MacError(`Refusing to write '${abs}': it is a symbolic link (changed since it was checked).`);
+      }
+      throw e;
+    }
+    try {
+      await fh.writeFile(content, "utf8");
+    } finally {
+      await fh.close();
+    }
   }
 
   /** Move a path to the Trash (recoverable) via Finder. */

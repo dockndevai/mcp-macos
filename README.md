@@ -22,7 +22,7 @@ The server starts **read-only** (see [Safe by default](#safe-by-default)); highe
 | `get_clipboard` | read the clipboard | read-only |
 | `list_apps` / `get_frontmost_app` | running apps; the active one | read-only |
 | `screenshot` | capture the screen as a PNG | read-only |
-| `write_file` | create/overwrite a file (confirms on overwrite) | read-write |
+| `write_file` | create/overwrite a file (confirms on overwrite; new files are created exclusively, so a file that appears mid-call is never silently overwritten) | read-write |
 | `set_clipboard` / `notify` / `open` | set clipboard, notify, open a file/URL/app | read-write |
 | `run_command` | run a program (argv, no shell) | admin + `MACOS_ALLOW_EXEC` |
 | `run_applescript` | run AppleScript / JXA | admin + `MACOS_ALLOW_EXEC` |

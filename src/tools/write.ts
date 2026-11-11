@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { canonicalize, resolvePath } from "../config.js";
+import { FileExistsError } from "../mac/client.js";
 import type { ToolDef } from "./types.js";
 import { jsonResult, textResult } from "./types.js";
 
@@ -23,21 +24,40 @@ export const writeTools: ToolDef[] = [
       },
     },
     handler: async (args, { client, policy, confirm }) => {
-      const abs = await canonicalize(resolvePath(args.path as string));
-      const { dryRun } = policy.guard({ tool: "write_file", capability: "write", path: abs, pathMutation: true });
-      const exists = await client.pathExists(abs);
-      if (dryRun) return textResult(`[dry-run] Would ${exists ? "overwrite" : "create"} ${abs}.`);
-      if (exists) {
-        const ok = await confirm.confirm({
-          action: "overwrite file",
-          target: abs,
-          // Canonical path + inode + mtime + size (directory: entry count) at prompt time; see MacClient.pathVersion.
-          probe: () => client.pathVersion(abs),
-        });
-        if (!ok.approved) return textResult(`Write cancelled — ${ok.reason}.`);
+      const content = args.content as string;
+      // A path that did not exist at check time is created exclusively (O_EXCL). If something appears there
+      // before the write lands, the open fails with EEXIST and we go round again: the path is re-resolved and
+      // re-guarded (the newcomer may be a symlink out of the allowlist) and the overwrite is put to the human
+      // like any other. The second round only runs after such a race; if it keeps losing, refuse.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const abs = await canonicalize(resolvePath(args.path as string));
+        const { dryRun } = policy.guard({ tool: "write_file", capability: "write", path: abs, pathMutation: true });
+        const exists = await client.pathExists(abs);
+        if (dryRun) return textResult(`[dry-run] Would ${exists ? "overwrite" : "create"} ${abs}.`);
+        if (exists) {
+          const ok = await confirm.confirm({
+            action: "overwrite file",
+            target: abs,
+            // Canonical path + inode + mtime + size (directory: entry count) at prompt time; see MacClient.pathVersion.
+            probe: () => client.pathVersion(abs),
+          });
+          if (!ok.approved) return textResult(`Write cancelled — ${ok.reason}.`);
+          await client.writeFile(abs, content);
+        } else {
+          try {
+            await client.writeFile(abs, content, { exclusive: true });
+          } catch (e) {
+            if (e instanceof FileExistsError) continue;
+            throw e;
+          }
+        }
+        return jsonResult({ written: true, path: abs, bytes: Buffer.byteLength(content) });
       }
-      await client.writeFile(abs, args.content as string);
-      return jsonResult({ written: true, path: abs, bytes: Buffer.byteLength(args.content as string) });
+      return textResult(
+        "Write refused — something already exists at the target that could not be confirmed as safe to " +
+          "overwrite (a dangling symbolic link, or an entry that appeared while the write was being prepared). " +
+          "Nothing was written.",
+      );
     },
   },
   {
